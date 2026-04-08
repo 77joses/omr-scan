@@ -114,7 +114,7 @@ function groupLines(lines) {
 
   if (current.length >= 5) staffs.push(current);
 
-  console.log("Detected staffs:", staffs);
+  document.body.innerHTML += "<pre>Detected staffs: " + JSON.stringify(staffs) + "</pre>";
 }
 </script>
 
