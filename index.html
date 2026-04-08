@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>OMR Test</title>
+
+  <style>
+    body {
+      font-family: Arial;
+      padding: 20px;
+      background: #111;
+      color: white;
+    }
+
+    canvas {
+      width: 100%;
+      margin-top: 20px;
+      background: white;
+    }
+  </style>
+</head>
+
+<body>
+
+<h2>Upload Sheet Music</h2>
+
+<input type="file" id="fileInput" accept="image/*">
+<canvas id="canvas"></canvas>
+
+<script>
+document.getElementById("fileInput").addEventListener("change", function(e) {
+  const file = e.target.files[0];
+  if (file) loadImage(file);
+});
+
+function loadImage(file) {
+  const img = new Image();
+  img.src = URL.createObjectURL(file);
+
+  img.onload = () => {
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = img.width;
+    canvas.height = img.height;
+
+    ctx.drawImage(img, 0, 0);
+
+    processImage(ctx, canvas.width, canvas.height);
+  };
+}
+
+function processImage(ctx, w, h) {
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const avg = (data[i] + data[i+1] + data[i+2]) / 3;
+    const value = avg > 150 ? 255 : 0;
+
+    data[i] = data[i+1] = data[i+2] = value;
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+
+  detectStaffLines(ctx, w, h);
+}
+
+function detectStaffLines(ctx, w, h) {
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  let rowCounts = [];
+
+  for (let y = 0; y < h; y++) {
+    let count = 0;
+
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (data[i] === 0) count++;
+    }
+
+    rowCounts.push(count);
+  }
+
+  findLines(rowCounts);
+}
+
+function findLines(rowCounts) {
+  const threshold = Math.max(...rowCounts) * 0.7;
+
+  let lines = [];
+
+  rowCounts.forEach((val, y) => {
+    if (val > threshold) {
+      lines.push(y);
+    }
+  });
+
+  groupLines(lines);
+}
+
+function groupLines(lines) {
+  let staffs = [];
+  let current = [lines[0]];
+
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i] - lines[i-1] < 10) {
+      current.push(lines[i]);
+    } else {
+      if (current.length >= 5) staffs.push(current);
+      current = [lines[i]];
+    }
+  }
+
+  if (current.length >= 5) staffs.push(current);
+
+  console.log("Detected staffs:", staffs);
+}
+</script>
+
+</body>
+</html>
