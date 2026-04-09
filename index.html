@@ -1,7 +1,7 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v10 - Note Head Detection</title>
+  <title>OMR v11 - Structured Detection</title>
 
   <style>
     body {
@@ -60,7 +60,7 @@ function loadImage(file) {
   };
 }
 
-// STEP 1: Clean binary image
+// STEP 1: Binarize
 function processImage(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
@@ -68,113 +68,80 @@ function processImage(ctx, w, h) {
   for (let i = 0; i < data.length; i += 4) {
     const avg = (data[i] + data[i+1] + data[i+2]) / 3;
     const value = avg > 150 ? 255 : 0;
-
     data[i] = data[i+1] = data[i+2] = value;
   }
 
   ctx.putImageData(imgData, 0, 0);
 
-  detectBlobs(ctx, w, h);
+  detectStaffLines(ctx, w, h);
 }
 
-// STEP 2: Blob detection
-function detectBlobs(ctx, w, h) {
+// STEP 2: Detect horizontal lines
+function detectStaffLines(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
 
-  const visited = new Uint8Array(w * h);
-  let blobs = [];
-
-  function floodFill(x, y) {
-    let stack = [{x, y}];
-    let pixels = [];
-
-    while (stack.length) {
-      let {x, y} = stack.pop();
-      let idx = y * w + x;
-
-      if (visited[idx]) continue;
-      visited[idx] = 1;
-
-      let i = idx * 4;
-      if (data[i] !== 0) continue;
-
-      pixels.push({x, y});
-
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          let nx = x + dx;
-          let ny = y + dy;
-
-          if (nx >= 0 && ny >= 0 && nx < w && ny < h) {
-            stack.push({x: nx, y: ny});
-          }
-        }
-      }
-    }
-
-    return pixels;
-  }
+  let rowCounts = [];
 
   for (let y = 0; y < h; y++) {
+    let count = 0;
     for (let x = 0; x < w; x++) {
-      let idx = y * w + x;
-      if (!visited[idx]) {
-        let blob = floodFill(x, y);
-        if (blob.length > 0) blobs.push(blob);
-      }
+      const i = (y * w + x) * 4;
+      if (data[i] === 0) count++;
+    }
+    rowCounts.push(count);
+  }
+
+  const threshold = Math.max(...rowCounts) * 0.7;
+
+  let lines = [];
+  rowCounts.forEach((val, y) => {
+    if (val > threshold) lines.push(y);
+  });
+
+  groupStaffs(lines);
+}
+
+// STEP 3: Group into staffs of 5
+function groupStaffs(lines) {
+  let staffs = [];
+  let current = [lines[0]];
+
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i] - lines[i-1] < 8) {
+      current.push(lines[i]);
+    } else {
+      if (current.length >= 5) staffs.push(current);
+      current = [lines[i]];
     }
   }
 
-  detectNoteHeads(blobs);
-}
+  if (current.length >= 5) staffs.push(current);
 
-// STEP 3: NOTE HEAD FILTER 🔥
-function detectNoteHeads(blobs) {
-  let heads = [];
-
-  blobs.forEach(blob => {
-
-    const size = blob.length;
-
-    // ignore very small / very large
-    if (size < 20 || size > 300) return;
-
-    let minX = Infinity, maxX = -Infinity;
-    let minY = Infinity, maxY = -Infinity;
-
-    blob.forEach(p => {
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
-    });
-
-    const width = maxX - minX;
-    const height = maxY - minY;
-
-    // avoid vertical shapes (stems)
-    if (height > width * 1.8) return;
-
-    const ratio = width / height;
-    const area = width * height;
-    const density = size / area;
-
-    // 🎯 HEAD CONDITIONS
-    if (
-      width > 5 && width < 20 &&
-      height > 5 && height < 20 &&
-      ratio > 0.6 && ratio < 1.6 &&
-      density > 0.35
-    ) {
-      heads.push(blob);
-    }
-  });
+  // keep only groups of exactly 5 lines
+  staffs = staffs.filter(s => s.length === 5);
 
   document.getElementById("output").innerHTML += 
-    "<pre>Detected NOTE HEADS: " + heads.length + "</pre>";
+    "<pre>Staffs detected: " + staffs.length + "</pre>";
+
+  processStaffs(staffs);
+}
+
+// STEP 4: Process each staff
+function processStaffs(staffs) {
+  let totalHeads = 0;
+
+  staffs.forEach((staff, index) => {
+
+    let spacing = (staff[4] - staff[0]) / 4;
+
+    document.getElementById("output").innerHTML += 
+      "<pre>Staff " + (index+1) + " spacing: " + spacing.toFixed(2) + "</pre>";
+
+    // Later: detect note heads per staff (next upgrade)
+  });
 }
 </script>
 
 </body>
-</html>      
+</html>    
