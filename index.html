@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <title>OMR Test</title>
@@ -74,80 +74,37 @@ function processImage(ctx, w, h) {
 
   ctx.putImageData(imgData, 0, 0);
 
-  detectStaffLines(ctx, w, h);
+  removeHorizontalLines(ctx, w, h);
 }
 
-// STEP 2: Detect staff lines
-function detectStaffLines(ctx, w, h) {
+// STEP 2: Remove horizontal lines
+function removeHorizontalLines(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
 
-  let rowCounts = [];
-
   for (let y = 0; y < h; y++) {
-    let count = 0;
+    let blackCount = 0;
 
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
-      if (data[i] === 0) count++;
+      if (data[i] === 0) blackCount++;
     }
 
-    rowCounts.push(count);
-  }
-
-  const threshold = Math.max(...rowCounts) * 0.7;
-
-  let lines = [];
-  rowCounts.forEach((val, y) => {
-    if (val > threshold) lines.push(y);
-  });
-
-  groupLines(lines, ctx, w, h);
-}
-
-// STEP 3: Group into staffs
-function groupLines(lines, ctx, w, h) {
-  let staffs = [];
-  let current = [lines[0]];
-
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i] - lines[i-1] < 10) {
-      current.push(lines[i]);
-    } else {
-      if (current.length >= 5) staffs.push(current);
-      current = [lines[i]];
-    }
-  }
-
-  if (current.length >= 5) staffs.push(current);
-
-  document.getElementById("output").innerHTML += 
-    "<pre>Staffs: " + staffs.length + "</pre>";
-
-  removeLines(ctx, w, h, staffs);
-}
-
-// STEP 4: Remove lines
-function removeLines(ctx, w, h, staffs) {
-  const imgData = ctx.getImageData(0, 0, w, h);
-  const data = imgData.data;
-
-  staffs.forEach(staff => {
-    staff.forEach(y => {
+    if (blackCount > w * 0.6) {
       for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4;
         data[i] = data[i+1] = data[i+2] = 255;
       }
-    });
-  });
+    }
+  }
 
   ctx.putImageData(imgData, 0, 0);
 
-  detectBlobs(ctx, w, h, staffs);
+  detectBlobs(ctx, w, h);
 }
 
-// STEP 5: Blob detection
-function detectBlobs(ctx, w, h, staffs) {
+// STEP 3: Blob detection
+function detectBlobs(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
 
@@ -195,43 +152,60 @@ function detectBlobs(ctx, w, h, staffs) {
     }
   }
 
-  filterNotes(blobs, staffs);
+  filterNotes(blobs);
 }
 
-// STEP 6: Staff-aware filtering (🔥 KEY)
-function filterNotes(blobs, staffs) {
-  let notes = [];
+// STEP 4: ROW FILTER (🔥 key improvement)
+function filterNotes(blobs) {
+  let candidates = [];
 
   blobs.forEach(blob => {
-    const size = blob.length;
+    if (blob.length > 30 && blob.length < 400) {
 
-    let sumY = 0;
-    blob.forEach(p => sumY += p.y);
-    const centerY = sumY / blob.length;
+      let sumY = 0;
+      blob.forEach(p => sumY += p.y);
+      const centerY = sumY / blob.length;
 
-    let nearStaff = false;
+      candidates.push({blob, centerY});
+    }
+  });
 
-    staffs.forEach(staff => {
-      const top = staff[0];
-      const bottom = staff[4];
+  // Group into horizontal rows
+  let rows = [];
 
-      if (centerY > top - 20 && centerY < bottom + 20) {
-        nearStaff = true;
+  candidates.forEach(note => {
+    let placed = false;
+
+    for (let row of rows) {
+      if (Math.abs(row.y - note.centerY) < 5) {
+        row.notes.push(note);
+        placed = true;
+        break;
       }
-    });
+    }
 
-    if (
-      nearStaff &&
-      size > 30 && size < 400
-    ) {
-      notes.push(blob);
+    if (!placed) {
+      rows.push({y: note.centerY, notes: [note]});
+    }
+  });
+
+  // Keep only rows with MANY notes (real music lines)
+  let finalNotes = [];
+
+  rows.forEach(row => {
+    if (row.notes.length > 8) { // 🔥 threshold
+      row.notes.forEach(n => finalNotes.push(n));
     }
   });
 
   document.getElementById("output").innerHTML += 
-    "<pre>Final notes: " + notes.length + "</pre>";
+    "<pre>Final notes: " + finalNotes.length + "</pre>";
 }
 </script>
 
 </body>
-</html>      
+</html>
+    
+  
+
+  
