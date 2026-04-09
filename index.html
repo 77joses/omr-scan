@@ -60,6 +60,7 @@ function loadImage(file) {
   };
 }
 
+// STEP 1: Convert to black & white
 function processImage(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
@@ -76,6 +77,7 @@ function processImage(ctx, w, h) {
   detectStaffLines(ctx, w, h);
 }
 
+// STEP 2: Detect staff lines
 function detectStaffLines(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
@@ -96,6 +98,7 @@ function detectStaffLines(ctx, w, h) {
   findLines(rowCounts, ctx, w, h);
 }
 
+// STEP 3: Identify lines
 function findLines(rowCounts, ctx, w, h) {
   const threshold = Math.max(...rowCounts) * 0.7;
 
@@ -110,6 +113,7 @@ function findLines(rowCounts, ctx, w, h) {
   groupLines(lines, ctx, w, h);
 }
 
+// STEP 4: Group into staffs
 function groupLines(lines, ctx, w, h) {
   let staffs = [];
   let current = [lines[0]];
@@ -128,15 +132,35 @@ function groupLines(lines, ctx, w, h) {
   document.getElementById("output").innerHTML += 
     "<pre>Staffs: " + JSON.stringify(staffs) + "</pre>";
 
-  // 🔥 Call note detection
-  const notes = detectNotes(ctx, w, h, staffs);
-
-  document.getElementById("output").innerHTML += 
-    "<pre>Notes detected: " + notes.length + "</pre>";
+  removeStaffLines(ctx, w, h, staffs);
 }
 
-// 🔥 NOTE DETECTION (now correctly inside script)
-function detectNotes(ctx, w, h, staffs) {
+// STEP 5: REMOVE staff lines (🔥 key improvement)
+function removeStaffLines(ctx, w, h, staffs) {
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  staffs.forEach(staff => {
+    staff.forEach(y => {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+
+        // erase line (make white)
+        data[i] = data[i+1] = data[i+2] = 255;
+      }
+    });
+  });
+
+  ctx.putImageData(imgData, 0, 0);
+
+  const notes = detectNotes(ctx, w, h);
+
+  document.getElementById("output").innerHTML += 
+    "<pre>Notes detected (cleaned): " + notes.length + "</pre>";
+}
+
+// STEP 6: Detect note blobs (cleaner now)
+function detectNotes(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
 
@@ -162,7 +186,7 @@ function detectNotes(ctx, w, h, staffs) {
           }
         }
 
-        if (count > 10) {
+        if (count > 12) {
           notes.push({x, y});
         }
       }
@@ -175,3 +199,4 @@ function detectNotes(ctx, w, h, staffs) {
 
 </body>
 </html>
+    
