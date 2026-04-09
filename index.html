@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v12 - Staff Detection</title>
+  <title>OMR v13 - Real Staff Detection</title>
 
   <style>
     body {
@@ -61,93 +61,99 @@ input.addEventListener("change", function(e) {
   };
 });
 
-// STEP 1: BINARIZE
+// STEP 1: BINARIZE (stronger)
 function processImage(ctx, w, h) {
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
 
   for (let i = 0; i < d.length; i += 4) {
     const avg = (d[i] + d[i+1] + d[i+2]) / 3;
-    const val = avg > 160 ? 255 : 0;
+    const val = avg > 140 ? 255 : 0; // lowered threshold
     d[i] = d[i+1] = d[i+2] = val;
   }
 
   ctx.putImageData(img, 0, 0);
 
-  detectStaffCandidates(ctx, w, h);
+  detectLines(ctx, w, h);
 }
 
-// STEP 2: FIND ALL HORIZONTAL CANDIDATES
-function detectStaffCandidates(ctx, w, h) {
+// STEP 2: DETECT TRUE HORIZONTAL LINES
+function detectLines(ctx, w, h) {
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
 
-  let rows = [];
+  let candidates = [];
 
   for (let y = 0; y < h; y++) {
-    let count = 0;
+    let maxRun = 0;
+    let currentRun = 0;
 
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
-      if (d[i] === 0) count++;
+
+      if (d[i] === 0) {
+        currentRun++;
+        if (currentRun > maxRun) maxRun = currentRun;
+      } else {
+        currentRun = 0;
+      }
     }
 
-    // LOW threshold so we don't miss faint lines
-    if (count > w * 0.15) {
-      rows.push(y);
+    // must be long horizontal segment
+    if (maxRun > w * 0.4) {
+      candidates.push(y);
     }
   }
 
-  groupIntoStaffs(rows);
+  groupStaffs(candidates);
 }
 
-// STEP 3: GROUP INTO REAL STAFFS
-function groupIntoStaffs(lines) {
+// STEP 3: GROUP INTO STAFFS
+function groupStaffs(lines) {
   let staffs = [];
 
   for (let i = 0; i < lines.length - 4; i++) {
 
-    let l1 = lines[i];
-    let l2 = lines[i+1];
-    let l3 = lines[i+2];
-    let l4 = lines[i+3];
-    let l5 = lines[i+4];
+    let group = [
+      lines[i],
+      lines[i+1],
+      lines[i+2],
+      lines[i+3],
+      lines[i+4]
+    ];
 
-    let d1 = l2 - l1;
-    let d2 = l3 - l2;
-    let d3 = l4 - l3;
-    let d4 = l5 - l4;
+    let d1 = group[1] - group[0];
+    let d2 = group[2] - group[1];
+    let d3 = group[3] - group[2];
+    let d4 = group[4] - group[3];
 
-    // equal spacing check
     if (
       Math.abs(d1 - d2) < 3 &&
       Math.abs(d2 - d3) < 3 &&
       Math.abs(d3 - d4) < 3 &&
-      d1 > 3 && d1 < 30
+      d1 > 4 && d1 < 25
     ) {
-      staffs.push([l1, l2, l3, l4, l5]);
-      i += 4; // skip ahead
+      staffs.push(group);
+      i += 4;
     }
   }
 
   displayStaffs(staffs);
 }
 
-// STEP 4: DISPLAY RESULTS
+// STEP 4: DISPLAY
 function displayStaffs(staffs) {
   output.innerHTML += "<pre>Staffs detected: " + staffs.length + "</pre>";
 
-  staffs.forEach((staff, i) => {
-    const spacing = (staff[4] - staff[0]) / 4;
+  staffs.forEach((s, i) => {
+    let spacing = (s[4] - s[0]) / 4;
 
     output.innerHTML += 
-      "<pre>Staff " + (i+1) + 
-      " → lines: " + staff.join(", ") +
+      "<pre>Staff " + (i+1) +
       " | spacing: " + spacing.toFixed(2) + "</pre>";
   });
 }
 </script>
 
 </body>
-</html>
-    
+</html>      
