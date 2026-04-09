@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v13 - Real Staff Detection</title>
+  <title>OMR v15 - Note Head Detection (Photo Engine)</title>
 
   <style>
     body {
@@ -61,100 +61,110 @@ input.addEventListener("change", function(e) {
   };
 });
 
-// STEP 1: BINARIZE (stronger)
+// STEP 1: BINARIZE (adaptive-ish)
 function processImage(ctx, w, h) {
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
 
   for (let i = 0; i < d.length; i += 4) {
     const avg = (d[i] + d[i+1] + d[i+2]) / 3;
-    const val = avg > 140 ? 255 : 0; // lowered threshold
+    const val = avg > 150 ? 255 : 0;
     d[i] = d[i+1] = d[i+2] = val;
   }
 
   ctx.putImageData(img, 0, 0);
 
-  detectLines(ctx, w, h);
+  detectBlobs(ctx, w, h);
 }
 
-// STEP 2: DETECT TRUE HORIZONTAL LINES
-function detectLines(ctx, w, h) {
+// STEP 2: FLOOD FILL BLOBS
+function detectBlobs(ctx, w, h) {
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
 
-  let candidates = [];
+  const visited = new Uint8Array(w * h);
+  let blobs = [];
 
-  for (let y = 0; y < h; y++) {
-    let maxRun = 0;
-    let currentRun = 0;
+  function floodFill(x, y) {
+    let stack = [{x, y}];
+    let pixels = [];
 
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
+    while (stack.length) {
+      let {x, y} = stack.pop();
+      let idx = y * w + x;
 
-      if (d[i] === 0) {
-        currentRun++;
-        if (currentRun > maxRun) maxRun = currentRun;
-      } else {
-        currentRun = 0;
+      if (visited[idx]) continue;
+      visited[idx] = 1;
+
+      let i = idx * 4;
+      if (d[i] !== 0) continue;
+
+      pixels.push({x, y});
+
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          let nx = x + dx;
+          let ny = y + dy;
+
+          if (nx >= 0 && ny >= 0 && nx < w && ny < h) {
+            stack.push({x: nx, y: ny});
+          }
+        }
       }
     }
 
-    // must be long horizontal segment
-    if (maxRun > w * 0.4) {
-      candidates.push(y);
+    return pixels;
+  }
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let idx = y * w + x;
+      if (!visited[idx]) {
+        let blob = floodFill(x, y);
+        if (blob.length > 0) blobs.push(blob);
+      }
     }
   }
 
-  groupStaffs(candidates);
+  filterHeads(blobs);
 }
 
-// STEP 3: GROUP INTO STAFFS
-function groupStaffs(lines) {
-  let staffs = [];
+// STEP 3: NOTE HEAD FILTER 🔥
+function filterHeads(blobs) {
+  let heads = [];
 
-  for (let i = 0; i < lines.length - 4; i++) {
+  blobs.forEach(blob => {
+    let size = blob.length;
 
-    let group = [
-      lines[i],
-      lines[i+1],
-      lines[i+2],
-      lines[i+3],
-      lines[i+4]
-    ];
+    // basic size filter
+    if (size < 30 || size > 500) return;
 
-    let d1 = group[1] - group[0];
-    let d2 = group[2] - group[1];
-    let d3 = group[3] - group[2];
-    let d4 = group[4] - group[3];
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
 
+    blob.forEach(p => {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    });
+
+    let width = maxX - minX;
+    let height = maxY - minY;
+
+    // avoid long vertical (stems)
+    if (height > width * 2) return;
+
+    // avoid long horizontal (beams)
+    if (width > height * 2) return;
+
+    let ratio = width / height;
+    let area = width * height;
+    let density = size / area;
+
+    // 🎯 NOTE HEAD RULES
     if (
-      Math.abs(d1 - d2) < 3 &&
-      Math.abs(d2 - d3) < 3 &&
-      Math.abs(d3 - d4) < 3 &&
-      d1 > 4 && d1 < 25
-    ) {
-      staffs.push(group);
-      i += 4;
-    }
-  }
-
-  displayStaffs(staffs);
-}
-
-// STEP 4: DISPLAY
-function displayStaffs(staffs) {
-  output.innerHTML += "<pre>Staffs detected: " + staffs.length + "</pre>";
-
-  staffs.forEach((s, i) => {
-    let spacing = (s[4] - s[0]) / 4;
-
-    output.innerHTML += 
-      "<pre>Staff " + (i+1) +
-      " | spacing: " + spacing.toFixed(2) + "</pre>";
-  });
-}
-</script>
-
-</body>
-</html>
-  
+      ratio > 0.5 && ratio < 1.8 &&
+      density > 0.3 &&
+      width > 6 && width < 25 &&
+      height > 6    
