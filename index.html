@@ -167,4 +167,15 @@ function filterHeads(blobs) {
       ratio > 0.5 && ratio < 1.8 &&
       density > 0.3 &&
       width > 6 && width < 25 &&
-      height > 6    
+      height > 6 && height < 25
+    ) {
+      heads.push(blob);
+    }
+  });
+
+  output.innerHTML += "<pre>Detected NOTE HEADS: " + heads.length + "</pre>";
+}
+</script>
+
+</body>
+</html>  
