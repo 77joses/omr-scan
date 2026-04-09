@@ -1,7 +1,7 @@
-  <!DOCTYPE html>
+ <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v11 - Structured Detection</title>
+  <title>OMR v12 - Staff Detection</title>
 
   <style>
     body {
@@ -21,7 +21,7 @@
       margin-top: 20px;
       background: #222;
       padding: 10px;
-      font-size: 12px;
+      font-size: 13px;
     }
   </style>
 </head>
@@ -36,13 +36,14 @@
 <div id="output"></div>
 
 <script>
-document.getElementById("fileInput").addEventListener("change", function(e) {
-  const file = e.target.files[0];
-  if (file) loadImage(file);
-});
+const input = document.getElementById("fileInput");
+const output = document.getElementById("output");
 
-function loadImage(file) {
-  document.getElementById("output").innerHTML = "";
+input.addEventListener("change", function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  output.innerHTML = "";
 
   const img = new Image();
   img.src = URL.createObjectURL(file);
@@ -58,90 +59,94 @@ function loadImage(file) {
 
     processImage(ctx, canvas.width, canvas.height);
   };
-}
+});
 
-// STEP 1: Binarize
+// STEP 1: BINARIZE
 function processImage(ctx, w, h) {
-  const imgData = ctx.getImageData(0, 0, w, h);
-  const data = imgData.data;
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
 
-  for (let i = 0; i < data.length; i += 4) {
-    const avg = (data[i] + data[i+1] + data[i+2]) / 3;
-    const value = avg > 150 ? 255 : 0;
-    data[i] = data[i+1] = data[i+2] = value;
+  for (let i = 0; i < d.length; i += 4) {
+    const avg = (d[i] + d[i+1] + d[i+2]) / 3;
+    const val = avg > 160 ? 255 : 0;
+    d[i] = d[i+1] = d[i+2] = val;
   }
 
-  ctx.putImageData(imgData, 0, 0);
+  ctx.putImageData(img, 0, 0);
 
-  detectStaffLines(ctx, w, h);
+  detectStaffCandidates(ctx, w, h);
 }
 
-// STEP 2: Detect horizontal lines
-function detectStaffLines(ctx, w, h) {
-  const imgData = ctx.getImageData(0, 0, w, h);
-  const data = imgData.data;
+// STEP 2: FIND ALL HORIZONTAL CANDIDATES
+function detectStaffCandidates(ctx, w, h) {
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
 
-  let rowCounts = [];
+  let rows = [];
 
   for (let y = 0; y < h; y++) {
     let count = 0;
+
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
-      if (data[i] === 0) count++;
+      if (d[i] === 0) count++;
     }
-    rowCounts.push(count);
+
+    // LOW threshold so we don't miss faint lines
+    if (count > w * 0.15) {
+      rows.push(y);
+    }
   }
 
-  const threshold = Math.max(...rowCounts) * 0.7;
-
-  let lines = [];
-  rowCounts.forEach((val, y) => {
-    if (val > threshold) lines.push(y);
-  });
-
-  groupStaffs(lines);
+  groupIntoStaffs(rows);
 }
 
-// STEP 3: Group into staffs of 5
-function groupStaffs(lines) {
+// STEP 3: GROUP INTO REAL STAFFS
+function groupIntoStaffs(lines) {
   let staffs = [];
-  let current = [lines[0]];
 
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i] - lines[i-1] < 8) {
-      current.push(lines[i]);
-    } else {
-      if (current.length >= 5) staffs.push(current);
-      current = [lines[i]];
+  for (let i = 0; i < lines.length - 4; i++) {
+
+    let l1 = lines[i];
+    let l2 = lines[i+1];
+    let l3 = lines[i+2];
+    let l4 = lines[i+3];
+    let l5 = lines[i+4];
+
+    let d1 = l2 - l1;
+    let d2 = l3 - l2;
+    let d3 = l4 - l3;
+    let d4 = l5 - l4;
+
+    // equal spacing check
+    if (
+      Math.abs(d1 - d2) < 3 &&
+      Math.abs(d2 - d3) < 3 &&
+      Math.abs(d3 - d4) < 3 &&
+      d1 > 3 && d1 < 30
+    ) {
+      staffs.push([l1, l2, l3, l4, l5]);
+      i += 4; // skip ahead
     }
   }
 
-  if (current.length >= 5) staffs.push(current);
-
-  // keep only groups of exactly 5 lines
-  staffs = staffs.filter(s => s.length === 5);
-
-  document.getElementById("output").innerHTML += 
-    "<pre>Staffs detected: " + staffs.length + "</pre>";
-
-  processStaffs(staffs);
+  displayStaffs(staffs);
 }
 
-// STEP 4: Process each staff
-function processStaffs(staffs) {
-  let totalHeads = 0;
+// STEP 4: DISPLAY RESULTS
+function displayStaffs(staffs) {
+  output.innerHTML += "<pre>Staffs detected: " + staffs.length + "</pre>";
 
-  staffs.forEach((staff, index) => {
+  staffs.forEach((staff, i) => {
+    const spacing = (staff[4] - staff[0]) / 4;
 
-    let spacing = (staff[4] - staff[0]) / 4;
-
-    document.getElementById("output").innerHTML += 
-      "<pre>Staff " + (index+1) + " spacing: " + spacing.toFixed(2) + "</pre>";
-
-    // Later: detect note heads per staff (next upgrade)
+    output.innerHTML += 
+      "<pre>Staff " + (i+1) + 
+      " → lines: " + staff.join(", ") +
+      " | spacing: " + spacing.toFixed(2) + "</pre>";
   });
 }
 </script>
 
 </body>
-</html>    
+</html> 
