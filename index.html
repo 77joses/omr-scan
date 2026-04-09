@@ -1,5 +1,4 @@
-
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <title>OMR Test</title>
@@ -61,7 +60,7 @@ function loadImage(file) {
   };
 }
 
-// STEP 1: Convert to black & white
+// STEP 1: Binarize
 function processImage(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
@@ -78,7 +77,7 @@ function processImage(ctx, w, h) {
   removeHorizontalLines(ctx, w, h);
 }
 
-// STEP 2: REMOVE ALL horizontal lines (🔥 stronger)
+// STEP 2: Remove horizontal lines
 function removeHorizontalLines(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
@@ -91,7 +90,6 @@ function removeHorizontalLines(ctx, w, h) {
       if (data[i] === 0) blackCount++;
     }
 
-    // If row is mostly black → it's a line
     if (blackCount > w * 0.6) {
       for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4;
@@ -102,48 +100,103 @@ function removeHorizontalLines(ctx, w, h) {
 
   ctx.putImageData(imgData, 0, 0);
 
-  detectNotes(ctx, w, h);
+  detectBlobs(ctx, w, h);
 }
 
-// STEP 3: Detect notes (cleaner now)
-function detectNotes(ctx, w, h) {
+// STEP 3: Blob detection (CONNECTED COMPONENTS)
+function detectBlobs(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
 
-  let notes = [];
+  const visited = new Uint8Array(w * h);
+  let blobs = [];
+
+  function floodFill(x, y) {
+    let stack = [{x, y}];
+    let pixels = [];
+
+    while (stack.length) {
+      let {x, y} = stack.pop();
+      let idx = y * w + x;
+
+      if (visited[idx]) continue;
+      visited[idx] = 1;
+
+      let i = idx * 4;
+      if (data[i] !== 0) continue;
+
+      pixels.push({x, y});
+
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          let nx = x + dx;
+          let ny = y + dy;
+
+          if (nx >= 0 && ny >= 0 && nx < w && ny < h) {
+            stack.push({x: nx, y: ny});
+          }
+        }
+      }
+    }
+
+    return pixels;
+  }
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
+      let idx = y * w + x;
+      if (!visited[idx]) {
+        let blob = floodFill(x, y);
 
-      if (data[i] === 0) {
-
-        let count = 0;
-
-        for (let dy = -2; dy <= 2; dy++) {
-          for (let dx = -2; dx <= 2; dx++) {
-            let nx = x + dx;
-            let ny = y + dy;
-
-            if (nx >= 0 && ny >= 0 && nx < w && ny < h) {
-              let ni = (ny * w + nx) * 4;
-              if (data[ni] === 0) count++;
-            }
-          }
-        }
-
-        // stronger filter
-        if (count > 15 && count < 40) {
-          notes.push({x, y});
+        if (blob.length > 0) {
+          blobs.push(blob);
         }
       }
     }
   }
 
+  filterNotes(blobs);
+}
+
+// STEP 4: Filter note-like blobs
+function filterNotes(blobs) {
+  let notes = [];
+
+  blobs.forEach(blob => {
+    const size = blob.length;
+
+    // bounding box
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+
+    blob.forEach(p => {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    });
+
+    const width = maxX - minX;
+    const height = maxY - minY;
+
+    // 🎯 FILTER RULES (tuned)
+    if (
+      size > 20 && size < 500 &&     // not tiny, not huge
+      width > 3 && width < 20 &&
+      height > 3 && height < 20
+    ) {
+      notes.push(blob);
+    }
+  });
+
   document.getElementById("output").innerHTML += 
-    "<pre>Notes detected (cleaned): " + notes.length + "</pre>";
+    "<pre>Blobs: " + blobs.length + "</pre>";
+
+  document.getElementById("output").innerHTML += 
+    "<pre>Likely notes: " + notes.length + "</pre>";
 }
 </script>
 
 </body>
-</html> 
+</html>
+     
