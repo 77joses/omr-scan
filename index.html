@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <title>OMR Test</title>
@@ -103,7 +103,7 @@ function removeHorizontalLines(ctx, w, h) {
   detectBlobs(ctx, w, h);
 }
 
-// STEP 3: Blob detection (CONNECTED COMPONENTS)
+// STEP 3: Blob detection
 function detectBlobs(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
@@ -147,10 +147,7 @@ function detectBlobs(ctx, w, h) {
       let idx = y * w + x;
       if (!visited[idx]) {
         let blob = floodFill(x, y);
-
-        if (blob.length > 0) {
-          blobs.push(blob);
-        }
+        if (blob.length > 0) blobs.push(blob);
       }
     }
   }
@@ -158,14 +155,13 @@ function detectBlobs(ctx, w, h) {
   filterNotes(blobs);
 }
 
-// STEP 4: Filter note-like blobs
+// STEP 4: Improved filtering
 function filterNotes(blobs) {
   let notes = [];
 
   blobs.forEach(blob => {
     const size = blob.length;
 
-    // bounding box
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
 
@@ -179,23 +175,25 @@ function filterNotes(blobs) {
     const width = maxX - minX;
     const height = maxY - minY;
 
-    // 🎯 FILTER RULES (tuned)
+    const ratio = width / height;
+    const area = width * height;
+    const density = size / area;
+
     if (
-      size > 20 && size < 500 &&     // not tiny, not huge
-      width > 3 && width < 20 &&
-      height > 3 && height < 20
+      size > 30 && size < 400 &&
+      width > 4 && width < 18 &&
+      height > 4 && height < 18 &&
+      ratio > 0.5 && ratio < 1.8 &&   // roughly round
+      density > 0.3                   // filled shape
     ) {
       notes.push(blob);
     }
   });
 
   document.getElementById("output").innerHTML += 
-    "<pre>Blobs: " + blobs.length + "</pre>";
-
-  document.getElementById("output").innerHTML += 
-    "<pre>Likely notes: " + notes.length + "</pre>";
+    "<pre>Likely notes (refined): " + notes.length + "</pre>";
 }
 </script>
 
 </body>
-</html>          
+</html> 
