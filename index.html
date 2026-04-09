@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <title>OMR Test</title>
@@ -155,7 +155,7 @@ function detectBlobs(ctx, w, h) {
   filterNotes(blobs, ctx, w, h);
 }
 
-// STEP 4: FINAL FILTER 🔥
+// STEP 4: BALANCED FILTER 🔥
 function filterNotes(blobs, ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
@@ -163,7 +163,7 @@ function filterNotes(blobs, ctx, w, h) {
   let notes = [];
 
   blobs.forEach(blob => {
-    if (blob.length < 30 || blob.length > 400) return;
+    if (blob.length < 25 || blob.length > 500) return;
 
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
@@ -180,7 +180,6 @@ function filterNotes(blobs, ctx, w, h) {
     const ratio = width / height;
     const density = blob.length / (width * height);
 
-    // center
     let sumX = 0, sumY = 0;
     blob.forEach(p => { sumX += p.x; sumY += p.y; });
     const cx = Math.floor(sumX / blob.length);
@@ -196,24 +195,22 @@ function filterNotes(blobs, ctx, w, h) {
       if (data[i] === 0) vertical++;
     }
 
+    const hasStem = vertical > 5;
+    const isRound = (ratio > 0.5 && ratio < 1.8 && density > 0.3);
+
+    // 🔥 KEY LOGIC
     if (
-      vertical > 6 &&                // stem exists
-      ratio > 0.6 && ratio < 1.6 && // round-ish
-      density > 0.4 &&              // filled
-      width < 18 && height < 18     // not large symbols
+      width < 20 && height < 20 &&
+      (hasStem || isRound)
     ) {
       notes.push(blob);
     }
   });
 
   document.getElementById("output").innerHTML += 
-    "<pre>Final notes (v8): " + notes.length + "</pre>";
+    "<pre>Final notes (v9): " + notes.length + "</pre>";
 }
 </script>
 
 </body>
-</html>        
-    
- 
-
-  
+</html>    
