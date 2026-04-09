@@ -19,7 +19,7 @@
   </style>
 </head>
 
-<body>
+<div id="output"></div>
 
 <h2>Upload Sheet Music</h2>
 
@@ -114,7 +114,7 @@ function groupLines(lines) {
 
   if (current.length >= 5) staffs.push(current);
 
-  document.body.innerHTML += "<pre>Detected staffs: " + JSON.stringify(staffs) + "</pre>";
+  document.getElementById("output").innerHTML += ... "<pre>Detected staffs: " + JSON.stringify(staffs) + "</pre>";
 }
 </script>
 
