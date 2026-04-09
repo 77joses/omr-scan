@@ -16,15 +16,24 @@
       margin-top: 20px;
       background: white;
     }
+
+    #output {
+      margin-top: 20px;
+      background: #222;
+      padding: 10px;
+      font-size: 12px;
+    }
   </style>
 </head>
 
-<div id="output"></div>
+<body>
 
 <h2>Upload Sheet Music</h2>
 
 <input type="file" id="fileInput" accept="image/*">
 <canvas id="canvas"></canvas>
+
+<div id="output"></div>
 
 <script>
 document.getElementById("fileInput").addEventListener("change", function(e) {
@@ -33,6 +42,8 @@ document.getElementById("fileInput").addEventListener("change", function(e) {
 });
 
 function loadImage(file) {
+  document.getElementById("output").innerHTML = "";
+
   const img = new Image();
   img.src = URL.createObjectURL(file);
 
@@ -82,10 +93,10 @@ function detectStaffLines(ctx, w, h) {
     rowCounts.push(count);
   }
 
-  findLines(rowCounts);
+  findLines(rowCounts, ctx, w, h);
 }
 
-function findLines(rowCounts) {
+function findLines(rowCounts, ctx, w, h) {
   const threshold = Math.max(...rowCounts) * 0.7;
 
   let lines = [];
@@ -96,10 +107,10 @@ function findLines(rowCounts) {
     }
   });
 
-  groupLines(lines);
+  groupLines(lines, ctx, w, h);
 }
 
-function groupLines(lines) {
+function groupLines(lines, ctx, w, h) {
   let staffs = [];
   let current = [lines[0]];
 
@@ -114,12 +125,17 @@ function groupLines(lines) {
 
   if (current.length >= 5) staffs.push(current);
 
-  document.getElementById("output").innerHTML += ... "<pre>Detected staffs: " + JSON.stringify(staffs) + "</pre>";
-}
-</script>
+  document.getElementById("output").innerHTML += 
+    "<pre>Staffs: " + JSON.stringify(staffs) + "</pre>";
 
-</body>
-</html>
+  // 🔥 Call note detection
+  const notes = detectNotes(ctx, w, h, staffs);
+
+  document.getElementById("output").innerHTML += 
+    "<pre>Notes detected: " + notes.length + "</pre>";
+}
+
+// 🔥 NOTE DETECTION (now correctly inside script)
 function detectNotes(ctx, w, h, staffs) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
@@ -130,9 +146,8 @@ function detectNotes(ctx, w, h, staffs) {
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
 
-      if (data[i] === 0) { // black pixel
+      if (data[i] === 0) {
 
-        // Check small surrounding area (blob detection)
         let count = 0;
 
         for (let dy = -2; dy <= 2; dy++) {
@@ -147,7 +162,6 @@ function detectNotes(ctx, w, h, staffs) {
           }
         }
 
-        // If dense blob → likely note
         if (count > 10) {
           notes.push({x, y});
         }
@@ -157,3 +171,7 @@ function detectNotes(ctx, w, h, staffs) {
 
   return notes;
 }
+</script>
+
+</body>
+</html>
