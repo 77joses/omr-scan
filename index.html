@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v15 - Note Head Detection (Photo Engine)</title>
+  <title>OMR v15.1 Debug</title>
 
   <style>
     body {
@@ -33,7 +33,7 @@
 <input type="file" id="fileInput" accept="image/*">
 <canvas id="canvas"></canvas>
 
-<div id="output"></div>
+<div id="output">Ready...</div>
 
 <script>
 const input = document.getElementById("fileInput");
@@ -43,7 +43,7 @@ input.addEventListener("change", function(e) {
   const file = e.target.files[0];
   if (!file) return;
 
-  output.innerHTML = "";
+  output.innerHTML = "Loading image...";
 
   const img = new Image();
   img.src = URL.createObjectURL(file);
@@ -61,14 +61,16 @@ input.addEventListener("change", function(e) {
   };
 });
 
-// STEP 1: BINARIZE (adaptive-ish)
+// STEP 1: BINARIZE
 function processImage(ctx, w, h) {
+  output.innerHTML += "<br>Processing image...";
+
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
 
   for (let i = 0; i < d.length; i += 4) {
     const avg = (d[i] + d[i+1] + d[i+2]) / 3;
-    const val = avg > 150 ? 255 : 0;
+    const val = avg > 170 ? 255 : 0; // safer threshold
     d[i] = d[i+1] = d[i+2] = val;
   }
 
@@ -77,8 +79,10 @@ function processImage(ctx, w, h) {
   detectBlobs(ctx, w, h);
 }
 
-// STEP 2: FLOOD FILL BLOBS
+// STEP 2: DETECT BLOBS
 function detectBlobs(ctx, w, h) {
+  output.innerHTML += "<br>Detecting blobs...";
+
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
 
@@ -126,18 +130,21 @@ function detectBlobs(ctx, w, h) {
     }
   }
 
+  output.innerHTML += "<br>Total blobs: " + blobs.length;
+
   filterHeads(blobs);
 }
 
-// STEP 3: NOTE HEAD FILTER 🔥
+// STEP 3: FILTER NOTE HEADS
 function filterHeads(blobs) {
+  output.innerHTML += "<br>Filtering note heads...";
+
   let heads = [];
 
   blobs.forEach(blob => {
     let size = blob.length;
 
-    // basic size filter
-    if (size < 30 || size > 500) return;
+    if (size < 20 || size > 600) return;
 
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
@@ -152,30 +159,27 @@ function filterHeads(blobs) {
     let width = maxX - minX;
     let height = maxY - minY;
 
-    // avoid long vertical (stems)
-    if (height > width * 2) return;
+    if (width < 5 || height < 5) return;
 
-    // avoid long horizontal (beams)
+    if (height > width * 2) return;
     if (width > height * 2) return;
 
     let ratio = width / height;
     let area = width * height;
     let density = size / area;
 
-    // 🎯 NOTE HEAD RULES
     if (
       ratio > 0.5 && ratio < 1.8 &&
-      density > 0.3 &&
-      width > 6 && width < 25 &&
-      height > 6 && height < 25
+      density > 0.25
     ) {
       heads.push(blob);
     }
   });
 
-  output.innerHTML += "<pre>Detected NOTE HEADS: " + heads.length + "</pre>";
+  output.innerHTML += "<br><b>Detected NOTE HEADS: " + heads.length + "</b>";
 }
 </script>
 
 </body>
-</html>  
+</html>
+   
