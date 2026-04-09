@@ -1,4 +1,5 @@
-<!DOCTYPE html>
+
+ <!DOCTYPE html>
 <html>
 <head>
   <title>OMR Test</title>
@@ -74,92 +75,37 @@ function processImage(ctx, w, h) {
 
   ctx.putImageData(imgData, 0, 0);
 
-  detectStaffLines(ctx, w, h);
+  removeHorizontalLines(ctx, w, h);
 }
 
-// STEP 2: Detect staff lines
-function detectStaffLines(ctx, w, h) {
+// STEP 2: REMOVE ALL horizontal lines (🔥 stronger)
+function removeHorizontalLines(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
 
-  let rowCounts = [];
-
   for (let y = 0; y < h; y++) {
-    let count = 0;
+    let blackCount = 0;
 
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
-      if (data[i] === 0) count++;
+      if (data[i] === 0) blackCount++;
     }
 
-    rowCounts.push(count);
-  }
-
-  findLines(rowCounts, ctx, w, h);
-}
-
-// STEP 3: Identify lines
-function findLines(rowCounts, ctx, w, h) {
-  const threshold = Math.max(...rowCounts) * 0.7;
-
-  let lines = [];
-
-  rowCounts.forEach((val, y) => {
-    if (val > threshold) {
-      lines.push(y);
-    }
-  });
-
-  groupLines(lines, ctx, w, h);
-}
-
-// STEP 4: Group into staffs
-function groupLines(lines, ctx, w, h) {
-  let staffs = [];
-  let current = [lines[0]];
-
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i] - lines[i-1] < 10) {
-      current.push(lines[i]);
-    } else {
-      if (current.length >= 5) staffs.push(current);
-      current = [lines[i]];
-    }
-  }
-
-  if (current.length >= 5) staffs.push(current);
-
-  document.getElementById("output").innerHTML += 
-    "<pre>Staffs: " + JSON.stringify(staffs) + "</pre>";
-
-  removeStaffLines(ctx, w, h, staffs);
-}
-
-// STEP 5: REMOVE staff lines (🔥 key improvement)
-function removeStaffLines(ctx, w, h, staffs) {
-  const imgData = ctx.getImageData(0, 0, w, h);
-  const data = imgData.data;
-
-  staffs.forEach(staff => {
-    staff.forEach(y => {
+    // If row is mostly black → it's a line
+    if (blackCount > w * 0.6) {
       for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4;
-
-        // erase line (make white)
         data[i] = data[i+1] = data[i+2] = 255;
       }
-    });
-  });
+    }
+  }
 
   ctx.putImageData(imgData, 0, 0);
 
-  const notes = detectNotes(ctx, w, h);
-
-  document.getElementById("output").innerHTML += 
-    "<pre>Notes detected (cleaned): " + notes.length + "</pre>";
+  detectNotes(ctx, w, h);
 }
 
-// STEP 6: Detect note blobs (cleaner now)
+// STEP 3: Detect notes (cleaner now)
 function detectNotes(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
@@ -186,17 +132,18 @@ function detectNotes(ctx, w, h) {
           }
         }
 
-        if (count > 12) {
+        // stronger filter
+        if (count > 15 && count < 40) {
           notes.push({x, y});
         }
       }
     }
   }
 
-  return notes;
+  document.getElementById("output").innerHTML += 
+    "<pre>Notes detected (cleaned): " + notes.length + "</pre>";
 }
 </script>
 
 </body>
-</html>
-    
+</html> 
