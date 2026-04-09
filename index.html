@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html>
 <head>
   <title>OMR Test</title>
@@ -152,60 +152,52 @@ function detectBlobs(ctx, w, h) {
     }
   }
 
-  filterNotes(blobs);
+  filterNotes(blobs, ctx, w, h);
 }
 
-// STEP 4: ROW FILTER (🔥 key improvement)
-function filterNotes(blobs) {
-  let candidates = [];
+// STEP 4: STEM FILTER (🔥 KEY)
+function filterNotes(blobs, ctx, w, h) {
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  let notes = [];
 
   blobs.forEach(blob => {
-    if (blob.length > 30 && blob.length < 400) {
+    if (blob.length < 30 || blob.length > 400) return;
 
-      let sumY = 0;
-      blob.forEach(p => sumY += p.y);
-      const centerY = sumY / blob.length;
+    // get center
+    let sumX = 0, sumY = 0;
+    blob.forEach(p => {
+      sumX += p.x;
+      sumY += p.y;
+    });
 
-      candidates.push({blob, centerY});
+    const cx = Math.floor(sumX / blob.length);
+    const cy = Math.floor(sumY / blob.length);
+
+    // 🔥 STEM CHECK
+    let verticalCount = 0;
+
+    for (let dy = -15; dy <= 15; dy++) {
+      let y = cy + dy;
+      if (y < 0 || y >= h) continue;
+
+      const i = (y * w + cx) * 4;
+      if (data[i] === 0) verticalCount++;
     }
-  });
 
-  // Group into horizontal rows
-  let rows = [];
-
-  candidates.forEach(note => {
-    let placed = false;
-
-    for (let row of rows) {
-      if (Math.abs(row.y - note.centerY) < 5) {
-        row.notes.push(note);
-        placed = true;
-        break;
-      }
-    }
-
-    if (!placed) {
-      rows.push({y: note.centerY, notes: [note]});
-    }
-  });
-
-  // Keep only rows with MANY notes (real music lines)
-  let finalNotes = [];
-
-  rows.forEach(row => {
-    if (row.notes.length > 8) { // 🔥 threshold
-      row.notes.forEach(n => finalNotes.push(n));
+    // if vertical line exists → likely note
+    if (verticalCount > 6) {
+      notes.push(blob);
     }
   });
 
   document.getElementById("output").innerHTML += 
-    "<pre>Final notes: " + finalNotes.length + "</pre>";
+    "<pre>Final notes (stem filtered): " + notes.length + "</pre>";
 }
 </script>
 
 </body>
-</html>
-    
-  
+</html>  
 
-  
+    
