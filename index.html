@@ -155,7 +155,7 @@ function detectBlobs(ctx, w, h) {
   filterNotes(blobs, ctx, w, h);
 }
 
-// STEP 4: STEM FILTER (🔥 KEY)
+// STEP 4: FINAL FILTER 🔥
 function filterNotes(blobs, ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
@@ -165,39 +165,55 @@ function filterNotes(blobs, ctx, w, h) {
   blobs.forEach(blob => {
     if (blob.length < 30 || blob.length > 400) return;
 
-    // get center
-    let sumX = 0, sumY = 0;
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+
     blob.forEach(p => {
-      sumX += p.x;
-      sumY += p.y;
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
     });
 
+    const width = maxX - minX;
+    const height = maxY - minY;
+    const ratio = width / height;
+    const density = blob.length / (width * height);
+
+    // center
+    let sumX = 0, sumY = 0;
+    blob.forEach(p => { sumX += p.x; sumY += p.y; });
     const cx = Math.floor(sumX / blob.length);
     const cy = Math.floor(sumY / blob.length);
 
-    // 🔥 STEM CHECK
-    let verticalCount = 0;
-
+    // stem check
+    let vertical = 0;
     for (let dy = -15; dy <= 15; dy++) {
       let y = cy + dy;
       if (y < 0 || y >= h) continue;
 
       const i = (y * w + cx) * 4;
-      if (data[i] === 0) verticalCount++;
+      if (data[i] === 0) vertical++;
     }
 
-    // if vertical line exists → likely note
-    if (verticalCount > 6) {
+    if (
+      vertical > 6 &&                // stem exists
+      ratio > 0.6 && ratio < 1.6 && // round-ish
+      density > 0.4 &&              // filled
+      width < 18 && height < 18     // not large symbols
+    ) {
       notes.push(blob);
     }
   });
 
   document.getElementById("output").innerHTML += 
-    "<pre>Final notes (stem filtered): " + notes.length + "</pre>";
+    "<pre>Final notes (v8): " + notes.length + "</pre>";
 }
 </script>
 
 </body>
-</html>  
-
+</html>        
     
+ 
+
+  
