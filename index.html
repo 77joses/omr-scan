@@ -120,3 +120,40 @@ function groupLines(lines) {
 
 </body>
 </html>
+function detectNotes(ctx, w, h, staffs) {
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  let notes = [];
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+
+      if (data[i] === 0) { // black pixel
+
+        // Check small surrounding area (blob detection)
+        let count = 0;
+
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            let nx = x + dx;
+            let ny = y + dy;
+
+            if (nx >= 0 && ny >= 0 && nx < w && ny < h) {
+              let ni = (ny * w + nx) * 4;
+              if (data[ni] === 0) count++;
+            }
+          }
+        }
+
+        // If dense blob → likely note
+        if (count > 10) {
+          notes.push({x, y});
+        }
+      }
+    }
+  }
+
+  return notes;
+}
