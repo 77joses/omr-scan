@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v15.3 - Merge Fix</title>
+  <title>OMR v16 - Size Based Detection</title>
 
   <style>
     body {
@@ -132,48 +132,24 @@ function detectBlobs(ctx, w, h) {
 
   output.innerHTML += "<br>Total blobs: " + blobs.length;
 
-  const merged = mergeBlobs(blobs);
-  output.innerHTML += "<br>After merge: " + merged.length;
-
-  filterHeads(merged);
+  analyzeSizes(blobs);
 }
 
-// STEP 3: MERGE CLOSE BLOBS 🔥
-function mergeBlobs(blobs) {
-  let merged = [];
+// STEP 3: FIND DOMINANT SIZE 🔥
+function analyzeSizes(blobs) {
+  let sizes = blobs.map(b => b.length).filter(s => s > 20 && s < 800);
 
-  blobs.forEach(blob => {
-    let added = false;
+  sizes.sort((a,b) => a-b);
 
-    for (let group of merged) {
-      if (isClose(blob, group)) {
-        group.push(...blob);
-        added = true;
-        break;
-      }
-    }
+  let mid = sizes[Math.floor(sizes.length / 2)];
 
-    if (!added) merged.push([...blob]);
-  });
+  output.innerHTML += "<br>Estimated note size: " + mid;
 
-  return merged;
+  filterHeads(blobs, mid);
 }
 
-// proximity check
-function isClose(a, b) {
-  for (let p1 of a) {
-    for (let p2 of b) {
-      let dx = p1.x - p2.x;
-      let dy = p1.y - p2.y;
-
-      if (dx*dx + dy*dy < 25) return true; // distance 5px
-    }
-  }
-  return false;
-}
-
-// STEP 4: FILTER HEADS
-function filterHeads(blobs) {
+// STEP 4: FILTER USING SIZE
+function filterHeads(blobs, targetSize) {
   output.innerHTML += "<br>Filtering note heads...";
 
   let heads = [];
@@ -181,7 +157,8 @@ function filterHeads(blobs) {
   blobs.forEach(blob => {
     let size = blob.length;
 
-    if (size < 20 || size > 900) return;
+    // keep blobs near dominant size
+    if (size < targetSize * 0.5 || size > targetSize * 1.8) return;
 
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
@@ -198,16 +175,9 @@ function filterHeads(blobs) {
 
     if (width < 4 || height < 4) return;
 
-    if (height > width * 2.5) return;
-    if (width > height * 2.5) return;
-
     let ratio = width / height;
-    let density = size / (width * height);
 
-    if (
-      ratio > 0.5 && ratio < 1.8 &&
-      density > 0.15
-    ) {
+    if (ratio > 0.5 && ratio < 1.8) {
       heads.push(blob);
     }
   });
@@ -218,3 +188,4 @@ function filterHeads(blobs) {
 
 </body>
 </html>
+       
