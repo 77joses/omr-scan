@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v18 - Negative Filter Engine</title>
+  <title>OMR v19 - Recovery Mode</title>
 
   <style>
     body {
@@ -79,7 +79,7 @@ function processImage(ctx, w, h) {
   detectStaffGap(ctx, w, h);
 }
 
-// STEP 2: STAFF GAP (for grid)
+// STEP 2: STAFF GAP
 function detectStaffGap(ctx, w, h) {
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
@@ -183,7 +183,7 @@ function detectBlobs(ctx, w, h, gap) {
   negativeFilter(blobs, gap);
 }
 
-// STEP 4: NEGATIVE FILTER 🔥
+// STEP 4: RECOVERY FILTER 🔥
 function negativeFilter(blobs, gap) {
   let kept = [];
 
@@ -191,11 +191,11 @@ function negativeFilter(blobs, gap) {
 
     let size = blob.length;
 
-    // ❌ REMOVE VERY SMALL (lyrics, dots)
-    if (size < 20) return;
+    // ✅ allow smaller blobs (recover notes)
+    if (size < 10) return;
 
-    // ❌ REMOVE VERY LARGE (clefs, symbols)
-    if (size > 600) return;
+    // ❌ still remove extreme large
+    if (size > 800) return;
 
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
@@ -210,29 +210,29 @@ function negativeFilter(blobs, gap) {
     let width = maxX - minX;
     let height = maxY - minY;
 
-    // ❌ REMOVE THIN SHAPES (lyrics, dynamics)
-    if (width < 4 || height < 4) return;
+    // ✅ allow smaller shapes
+    if (width < 3 || height < 3) return;
 
     let ratio = width / height;
 
-    // ❌ REMOVE VERTICAL (numbers, stems)
-    if (ratio < 0.3) return;
+    // ✅ much looser shape rule
+    if (ratio < 0.2 || ratio > 4) return;
 
-    // ❌ REMOVE HORIZONTAL (beams)
-    if (ratio > 3) return;
-
-    // ❌ REMOVE NON-GRID (lyrics, rests)
+    // ✅ looser grid alignment
     let centerY = (minY + maxY) / 2;
     let r = centerY % gap;
 
-    if (!(r < gap * 0.25 || r > gap * 0.75)) return;
+    let aligned =
+      r < gap * 0.4 ||
+      r > gap * 0.6;
 
-    // ✅ KEEP (likely note head)
+    if (!aligned) return;
+
     kept.push(blob);
 
   });
 
-  output.innerHTML += "<br><b>Remaining (NOTE HEADS): " + kept.length + "</b>";
+  output.innerHTML += "<br><b>Recovered NOTE HEADS: " + kept.length + "</b>";
 }
 </script>
 
