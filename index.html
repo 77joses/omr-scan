@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v16.1 - Size Cluster Detection</title>
+  <title>OMR v16.2 - Stabilized Detection</title>
 
   <style>
     body {
@@ -61,7 +61,7 @@ input.addEventListener("change", function(e) {
   };
 });
 
-// BINARIZE
+// STEP 1: BINARIZE
 function processImage(ctx, w, h) {
   output.innerHTML += "<br>Processing image...";
 
@@ -76,10 +76,46 @@ function processImage(ctx, w, h) {
 
   ctx.putImageData(img, 0, 0);
 
+  strengthenPixels(ctx, w, h);
+}
+
+// STEP 2: LIGHT PIXEL STRENGTHENING 🔥
+function strengthenPixels(ctx, w, h) {
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+
+      let i = (y * w + x) * 4;
+
+      if (d[i] === 255) {
+        let neighbors = 0;
+
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            let nx = x + dx;
+            let ny = y + dy;
+            let ni = (ny * w + nx) * 4;
+
+            if (d[ni] === 0) neighbors++;
+          }
+        }
+
+        // if surrounded by black → fill gap
+        if (neighbors >= 5) {
+          d[i] = d[i+1] = d[i+2] = 0;
+        }
+      }
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+
   detectBlobs(ctx, w, h);
 }
 
-// BLOBS
+// STEP 3: BLOBS
 function detectBlobs(ctx, w, h) {
   output.innerHTML += "<br>Detecting blobs...";
 
@@ -132,40 +168,11 @@ function detectBlobs(ctx, w, h) {
 
   output.innerHTML += "<br>Total blobs: " + blobs.length;
 
-  findDominantSize(blobs);
+  filterHeads(blobs);
 }
 
-// 🔥 FIND MOST COMMON SIZE (MODE)
-function findDominantSize(blobs) {
-  let histogram = {};
-
-  blobs.forEach(b => {
-    let s = b.length;
-
-    if (s < 10 || s > 500) return;
-
-    let bucket = Math.round(s / 5) * 5; // group sizes
-
-    histogram[bucket] = (histogram[bucket] || 0) + 1;
-  });
-
-  let bestSize = 0;
-  let maxCount = 0;
-
-  for (let size in histogram) {
-    if (histogram[size] > maxCount) {
-      maxCount = histogram[size];
-      bestSize = parseInt(size);
-    }
-  }
-
-  output.innerHTML += "<br>Dominant note size: " + bestSize;
-
-  filterHeads(blobs, bestSize);
-}
-
-// FILTER
-function filterHeads(blobs, targetSize) {
+// STEP 4: FINAL FILTER (simple + robust)
+function filterHeads(blobs) {
   output.innerHTML += "<br>Filtering note heads...";
 
   let heads = [];
@@ -173,7 +180,8 @@ function filterHeads(blobs, targetSize) {
   blobs.forEach(blob => {
     let size = blob.length;
 
-    if (size < targetSize * 0.6 || size > targetSize * 1.6) return;
+    // new balanced range
+    if (size < 25 || size > 400) return;
 
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
@@ -188,7 +196,7 @@ function filterHeads(blobs, targetSize) {
     let width = maxX - minX;
     let height = maxY - minY;
 
-    if (width < 4 || height < 4) return;
+    if (width < 5 || height < 5) return;
 
     let ratio = width / height;
 
@@ -202,4 +210,4 @@ function filterHeads(blobs, targetSize) {
 </script>
 
 </body>
-</html>     
+</html>
