@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v19 - Recovery Mode</title>
+  <title>OMR v20 - Notehead Scoring</title>
 
   <style>
     body {
@@ -180,22 +180,17 @@ function detectBlobs(ctx, w, h, gap) {
 
   output.innerHTML += "<br>Total blobs: " + blobs.length;
 
-  negativeFilter(blobs, gap);
+  scoreNoteheads(blobs, gap);
 }
 
-// STEP 4: RECOVERY FILTER 🔥
-function negativeFilter(blobs, gap) {
-  let kept = [];
+// STEP 4: NOTEHEAD SCORING 🔥
+function scoreNoteheads(blobs, gap) {
+  let scored = [];
 
   blobs.forEach(blob => {
 
     let size = blob.length;
-
-    // ✅ allow smaller blobs (recover notes)
-    if (size < 10) return;
-
-    // ❌ still remove extreme large
-    if (size > 800) return;
+    if (size < 10 || size > 800) return;
 
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
@@ -210,15 +205,13 @@ function negativeFilter(blobs, gap) {
     let width = maxX - minX;
     let height = maxY - minY;
 
-    // ✅ allow smaller shapes
     if (width < 3 || height < 3) return;
 
     let ratio = width / height;
 
-    // ✅ much looser shape rule
-    if (ratio < 0.2 || ratio > 4) return;
+    if (ratio < 0.3 || ratio > 3) return;
 
-    // ✅ looser grid alignment
+    // grid alignment
     let centerY = (minY + maxY) / 2;
     let r = centerY % gap;
 
@@ -228,13 +221,30 @@ function negativeFilter(blobs, gap) {
 
     if (!aligned) return;
 
-    kept.push(blob);
+    // 🔥 scoring
+    let area = width * height;
+    let density = size / area;
+
+    let densityScore = 1 - Math.abs(density - 0.6);
+    let shapeScore = 1 - Math.abs(ratio - 1);
+
+    let score = densityScore * 0.6 + shapeScore * 0.4;
+
+    scored.push({ blob, score });
 
   });
 
-  output.innerHTML += "<br><b>Recovered NOTE HEADS: " + kept.length + "</b>";
+  // sort best first
+  scored.sort((a, b) => b.score - a.score);
+
+  // adaptive selection
+  let keepCount = Math.min(220, scored.length);
+
+  let final = scored.slice(0, keepCount);
+
+  output.innerHTML += "<br><b>Final NOTE HEADS: " + final.length + "</b>";
 }
 </script>
 
 </body>
-</html>
+</html>        
