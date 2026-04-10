@@ -1,7 +1,7 @@
-   <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v21 - Pitch Detection</title>
+  <title>OMR v22 - Stable Pitch Mapping</title>
 
   <style>
     body {
@@ -77,7 +77,7 @@ function processImage(ctx, w, h) {
   detectStaff(ctx, w, h);
 }
 
-// DETECT STAFF LINES
+// STAFF LINES
 function detectStaff(ctx, w, h) {
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
@@ -100,7 +100,6 @@ function detectStaff(ctx, w, h) {
     if (val > threshold) lines.push(y);
   });
 
-  // compress close lines
   let staffLines = [];
   for (let i = 0; i < lines.length; i++) {
     if (i === 0 || lines[i] - lines[i-1] > 2) {
@@ -108,7 +107,7 @@ function detectStaff(ctx, w, h) {
     }
   }
 
-  output.innerHTML += "<br>Staff lines detected: " + staffLines.length;
+  output.innerHTML += "<br>Staff lines: " + staffLines.length;
 
   detectBlobs(ctx, w, h, staffLines);
 }
@@ -162,41 +161,81 @@ function detectBlobs(ctx, w, h, staffLines) {
     }
   }
 
-  scoreAndMap(blobs, staffLines);
+  scoreNoteheads(blobs, staffLines);
 }
 
-// SCORE + MAP TO PITCH
-function scoreAndMap(blobs, staffLines) {
-  let notes = [];
+// ✅ SCORE FIRST
+function scoreNoteheads(blobs, staffLines) {
+  let scored = [];
 
   blobs.forEach(blob => {
 
     let size = blob.length;
     if (size < 10 || size > 800) return;
 
+    let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
 
     blob.forEach(p => {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
       if (p.y < minY) minY = p.y;
       if (p.y > maxY) maxY = p.y;
     });
 
+    let width = maxX - minX;
+    let height = maxY - minY;
+
+    if (width < 3 || height < 3) return;
+
+    let ratio = width / height;
+    if (ratio < 0.3 || ratio > 3) return;
+
+    let area = width * height;
+    let density = size / area;
+
+    let densityScore = 1 - Math.abs(density - 0.6);
+    let shapeScore = 1 - Math.abs(ratio - 1);
+
+    let score = densityScore * 0.6 + shapeScore * 0.4;
+
     let centerY = (minY + maxY) / 2;
 
-    // find nearest staff line
-    let closestLine = staffLines.reduce((a, b) =>
-      Math.abs(b - centerY) < Math.abs(a - centerY) ? b : a
-    );
+    scored.push({
+      centerY,
+      score
+    });
 
-    let distance = centerY - closestLine;
-
-    // convert to step index
-    let step = Math.round(distance / 4); // 4 ≈ half gap (tuned)
-
-    notes.push(step);
   });
 
-  output.innerHTML += "<br><b>Mapped notes: " + notes.length + "</b>";
+  scored.sort((a, b) => b.score - a.score);
+
+  let final = scored.slice(0, 220);
+
+  output.innerHTML += "<br>Final NOTE HEADS: " + final.length;
+
+  mapPitch(final, staffLines);
+}
+
+// 🎼 MAP PITCH
+function mapPitch(notes, staffLines) {
+
+  let pitches = [];
+
+  notes.forEach(n => {
+
+    let closestLine = staffLines.reduce((a, b) =>
+      Math.abs(b - n.centerY) < Math.abs(a - n.centerY) ? b : a
+    );
+
+    let distance = n.centerY - closestLine;
+
+    let step = Math.round(distance / 4);
+
+    pitches.push(step);
+  });
+
+  output.innerHTML += "<br><b>Mapped notes: " + pitches.length + "</b>";
 }
 </script>
 
