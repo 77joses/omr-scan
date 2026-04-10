@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v22 - Stable Pitch Mapping</title>
+  <title>OMR v23 - Notes + Pitch Names</title>
 
   <style>
     body {
@@ -164,7 +164,7 @@ function detectBlobs(ctx, w, h, staffLines) {
   scoreNoteheads(blobs, staffLines);
 }
 
-// ✅ SCORE FIRST
+// SCORE NOTEHEADS
 function scoreNoteheads(blobs, staffLines) {
   let scored = [];
 
@@ -217,25 +217,45 @@ function scoreNoteheads(blobs, staffLines) {
   mapPitch(final, staffLines);
 }
 
-// 🎼 MAP PITCH
+// 🎼 MAP TO REAL NOTES
 function mapPitch(notes, staffLines) {
 
-  let pitches = [];
+  const noteScale = ["C","D","E","F","G","A","B"];
+
+  let results = [];
 
   notes.forEach(n => {
 
-    let closestLine = staffLines.reduce((a, b) =>
-      Math.abs(b - n.centerY) < Math.abs(a - n.centerY) ? b : a
-    );
+    let closestLineIndex = 0;
+    let minDist = Infinity;
 
-    let distance = n.centerY - closestLine;
+    staffLines.forEach((line, i) => {
+      let dist = Math.abs(n.centerY - line);
+      if (dist < minDist) {
+        minDist = dist;
+        closestLineIndex = i;
+      }
+    });
+
+    let closestLineY = staffLines[closestLineIndex];
+
+    let distance = n.centerY - closestLineY;
 
     let step = Math.round(distance / 4);
 
-    pitches.push(step);
+    let baseIndex = 2; // E
+
+    let noteIndex = baseIndex - (closestLineIndex % 5) * 2 - step;
+
+    while (noteIndex < 0) noteIndex += 7;
+    noteIndex = noteIndex % 7;
+
+    let noteName = noteScale[noteIndex];
+
+    results.push(noteName);
   });
 
-  output.innerHTML += "<br><b>Mapped notes: " + pitches.length + "</b>";
+  output.innerHTML += "<br><b>Sample notes:</b> " + results.slice(0, 25).join(" ");
 }
 </script>
 
