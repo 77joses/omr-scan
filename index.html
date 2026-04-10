@@ -1,7 +1,7 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v20 - Notehead Scoring</title>
+  <title>OMR v21 - Pitch Detection</title>
 
   <style>
     body {
@@ -61,10 +61,8 @@ input.addEventListener("change", function(e) {
   };
 });
 
-// STEP 1: BINARIZE
+// BINARIZE
 function processImage(ctx, w, h) {
-  output.innerHTML += "<br>Processing image...";
-
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
 
@@ -76,11 +74,11 @@ function processImage(ctx, w, h) {
 
   ctx.putImageData(img, 0, 0);
 
-  detectStaffGap(ctx, w, h);
+  detectStaff(ctx, w, h);
 }
 
-// STEP 2: STAFF GAP
-function detectStaffGap(ctx, w, h) {
+// DETECT STAFF LINES
+function detectStaff(ctx, w, h) {
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
 
@@ -95,42 +93,28 @@ function detectStaffGap(ctx, w, h) {
     rowCounts.push(count);
   }
 
-  let peaks = [];
   let threshold = Math.max(...rowCounts) * 0.6;
 
+  let lines = [];
   rowCounts.forEach((val, y) => {
-    if (val > threshold) peaks.push(y);
+    if (val > threshold) lines.push(y);
   });
 
-  let gaps = [];
-  for (let i = 1; i < peaks.length; i++) {
-    let g = peaks[i] - peaks[i-1];
-    if (g > 2 && g < 50) gaps.push(g);
-  }
-
-  let freq = {};
-  gaps.forEach(g => {
-    let k = Math.round(g);
-    freq[k] = (freq[k] || 0) + 1;
-  });
-
-  let bestGap = 0, max = 0;
-  for (let k in freq) {
-    if (freq[k] > max) {
-      max = freq[k];
-      bestGap = parseInt(k);
+  // compress close lines
+  let staffLines = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (i === 0 || lines[i] - lines[i-1] > 2) {
+      staffLines.push(lines[i]);
     }
   }
 
-  output.innerHTML += "<br>Staff gap: " + bestGap;
+  output.innerHTML += "<br>Staff lines detected: " + staffLines.length;
 
-  detectBlobs(ctx, w, h, bestGap);
+  detectBlobs(ctx, w, h, staffLines);
 }
 
-// STEP 3: BLOBS
-function detectBlobs(ctx, w, h, gap) {
-  output.innerHTML += "<br>Detecting blobs...";
-
+// BLOBS
+function detectBlobs(ctx, w, h, staffLines) {
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
 
@@ -178,73 +162,43 @@ function detectBlobs(ctx, w, h, gap) {
     }
   }
 
-  output.innerHTML += "<br>Total blobs: " + blobs.length;
-
-  scoreNoteheads(blobs, gap);
+  scoreAndMap(blobs, staffLines);
 }
 
-// STEP 4: NOTEHEAD SCORING 🔥
-function scoreNoteheads(blobs, gap) {
-  let scored = [];
+// SCORE + MAP TO PITCH
+function scoreAndMap(blobs, staffLines) {
+  let notes = [];
 
   blobs.forEach(blob => {
 
     let size = blob.length;
     if (size < 10 || size > 800) return;
 
-    let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
 
     blob.forEach(p => {
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
       if (p.y < minY) minY = p.y;
       if (p.y > maxY) maxY = p.y;
     });
 
-    let width = maxX - minX;
-    let height = maxY - minY;
-
-    if (width < 3 || height < 3) return;
-
-    let ratio = width / height;
-
-    if (ratio < 0.3 || ratio > 3) return;
-
-    // grid alignment
     let centerY = (minY + maxY) / 2;
-    let r = centerY % gap;
 
-    let aligned =
-      r < gap * 0.4 ||
-      r > gap * 0.6;
+    // find nearest staff line
+    let closestLine = staffLines.reduce((a, b) =>
+      Math.abs(b - centerY) < Math.abs(a - centerY) ? b : a
+    );
 
-    if (!aligned) return;
+    let distance = centerY - closestLine;
 
-    // 🔥 scoring
-    let area = width * height;
-    let density = size / area;
+    // convert to step index
+    let step = Math.round(distance / 4); // 4 ≈ half gap (tuned)
 
-    let densityScore = 1 - Math.abs(density - 0.6);
-    let shapeScore = 1 - Math.abs(ratio - 1);
-
-    let score = densityScore * 0.6 + shapeScore * 0.4;
-
-    scored.push({ blob, score });
-
+    notes.push(step);
   });
 
-  // sort best first
-  scored.sort((a, b) => b.score - a.score);
-
-  // adaptive selection
-  let keepCount = Math.min(220, scored.length);
-
-  let final = scored.slice(0, keepCount);
-
-  output.innerHTML += "<br><b>Final NOTE HEADS: " + final.length + "</b>";
+  output.innerHTML += "<br><b>Mapped notes: " + notes.length + "</b>";
 }
 </script>
 
 </body>
-</html>        
+</html>
