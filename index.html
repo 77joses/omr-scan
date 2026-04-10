@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v16.2 - Stabilized Detection</title>
+  <title>OMR v17 - Grid Based Detection</title>
 
   <style>
     body {
@@ -76,47 +76,69 @@ function processImage(ctx, w, h) {
 
   ctx.putImageData(img, 0, 0);
 
-  strengthenPixels(ctx, w, h);
+  detectStaffSpacing(ctx, w, h);
 }
 
-// STEP 2: LIGHT PIXEL STRENGTHENING 🔥
-function strengthenPixels(ctx, w, h) {
+// STEP 2: DETECT STAFF SPACING 🔥
+function detectStaffSpacing(ctx, w, h) {
+  output.innerHTML += "<br>Detecting staff spacing...";
+
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
 
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
+  let rowCounts = [];
 
+  for (let y = 0; y < h; y++) {
+    let count = 0;
+
+    for (let x = 0; x < w; x++) {
       let i = (y * w + x) * 4;
+      if (d[i] === 0) count++;
+    }
 
-      if (d[i] === 255) {
-        let neighbors = 0;
+    rowCounts.push(count);
+  }
 
-        for (let dx = -1; dx <= 1; dx++) {
-          for (let dy = -1; dy <= 1; dy++) {
-            let nx = x + dx;
-            let ny = y + dy;
-            let ni = (ny * w + nx) * 4;
+  // find peaks (staff lines)
+  let peaks = [];
+  let threshold = Math.max(...rowCounts) * 0.6;
 
-            if (d[ni] === 0) neighbors++;
-          }
-        }
+  rowCounts.forEach((val, y) => {
+    if (val > threshold) peaks.push(y);
+  });
 
-        // if surrounded by black → fill gap
-        if (neighbors >= 5) {
-          d[i] = d[i+1] = d[i+2] = 0;
-        }
-      }
+  // compute distances between peaks
+  let gaps = [];
+
+  for (let i = 1; i < peaks.length; i++) {
+    let gap = peaks[i] - peaks[i-1];
+    if (gap > 2 && gap < 50) gaps.push(gap);
+  }
+
+  // find most common gap
+  let freq = {};
+  gaps.forEach(g => {
+    let key = Math.round(g);
+    freq[key] = (freq[key] || 0) + 1;
+  });
+
+  let bestGap = 0;
+  let maxCount = 0;
+
+  for (let g in freq) {
+    if (freq[g] > maxCount) {
+      maxCount = freq[g];
+      bestGap = parseInt(g);
     }
   }
 
-  ctx.putImageData(img, 0, 0);
+  output.innerHTML += "<br>Estimated staff gap: " + bestGap;
 
-  detectBlobs(ctx, w, h);
+  detectBlobs(ctx, w, h, bestGap);
 }
 
 // STEP 3: BLOBS
-function detectBlobs(ctx, w, h) {
+function detectBlobs(ctx, w, h, gap) {
   output.innerHTML += "<br>Detecting blobs...";
 
   const img = ctx.getImageData(0, 0, w, h);
@@ -168,21 +190,35 @@ function detectBlobs(ctx, w, h) {
 
   output.innerHTML += "<br>Total blobs: " + blobs.length;
 
-  filterHeads(blobs);
+  filterWithGrid(blobs, gap);
 }
 
-// STEP 4: FINAL FILTER (simple + robust)
-function filterHeads(blobs) {
-  output.innerHTML += "<br>Filtering note heads...";
+// STEP 4: GRID FILTER 🔥
+function filterWithGrid(blobs, gap) {
+  output.innerHTML += "<br>Applying grid filter...";
 
   let heads = [];
 
   blobs.forEach(blob => {
     let size = blob.length;
 
-    // new balanced range
-    if (size < 25 || size > 400) return;
+    if (size < 20 || size > 500) return;
 
+    let sumY = 0;
+    blob.forEach(p => sumY += p.y);
+    let centerY = sumY / blob.length;
+
+    // check alignment to grid
+    let remainder = centerY % gap;
+
+    let aligned = (
+      remainder < gap * 0.25 ||
+      remainder > gap * 0.75
+    );
+
+    if (!aligned) return;
+
+    // shape check
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
 
