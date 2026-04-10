@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v17 - Grid Based Detection</title>
+  <title>OMR v18 - Negative Filter Engine</title>
 
   <style>
     body {
@@ -76,13 +76,11 @@ function processImage(ctx, w, h) {
 
   ctx.putImageData(img, 0, 0);
 
-  detectStaffSpacing(ctx, w, h);
+  detectStaffGap(ctx, w, h);
 }
 
-// STEP 2: DETECT STAFF SPACING 🔥
-function detectStaffSpacing(ctx, w, h) {
-  output.innerHTML += "<br>Detecting staff spacing...";
-
+// STEP 2: STAFF GAP (for grid)
+function detectStaffGap(ctx, w, h) {
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
 
@@ -90,16 +88,13 @@ function detectStaffSpacing(ctx, w, h) {
 
   for (let y = 0; y < h; y++) {
     let count = 0;
-
     for (let x = 0; x < w; x++) {
       let i = (y * w + x) * 4;
       if (d[i] === 0) count++;
     }
-
     rowCounts.push(count);
   }
 
-  // find peaks (staff lines)
   let peaks = [];
   let threshold = Math.max(...rowCounts) * 0.6;
 
@@ -107,32 +102,27 @@ function detectStaffSpacing(ctx, w, h) {
     if (val > threshold) peaks.push(y);
   });
 
-  // compute distances between peaks
   let gaps = [];
-
   for (let i = 1; i < peaks.length; i++) {
-    let gap = peaks[i] - peaks[i-1];
-    if (gap > 2 && gap < 50) gaps.push(gap);
+    let g = peaks[i] - peaks[i-1];
+    if (g > 2 && g < 50) gaps.push(g);
   }
 
-  // find most common gap
   let freq = {};
   gaps.forEach(g => {
-    let key = Math.round(g);
-    freq[key] = (freq[key] || 0) + 1;
+    let k = Math.round(g);
+    freq[k] = (freq[k] || 0) + 1;
   });
 
-  let bestGap = 0;
-  let maxCount = 0;
-
-  for (let g in freq) {
-    if (freq[g] > maxCount) {
-      maxCount = freq[g];
-      bestGap = parseInt(g);
+  let bestGap = 0, max = 0;
+  for (let k in freq) {
+    if (freq[k] > max) {
+      max = freq[k];
+      bestGap = parseInt(k);
     }
   }
 
-  output.innerHTML += "<br>Estimated staff gap: " + bestGap;
+  output.innerHTML += "<br>Staff gap: " + bestGap;
 
   detectBlobs(ctx, w, h, bestGap);
 }
@@ -190,35 +180,23 @@ function detectBlobs(ctx, w, h, gap) {
 
   output.innerHTML += "<br>Total blobs: " + blobs.length;
 
-  filterWithGrid(blobs, gap);
+  negativeFilter(blobs, gap);
 }
 
-// STEP 4: GRID FILTER 🔥
-function filterWithGrid(blobs, gap) {
-  output.innerHTML += "<br>Applying grid filter...";
-
-  let heads = [];
+// STEP 4: NEGATIVE FILTER 🔥
+function negativeFilter(blobs, gap) {
+  let kept = [];
 
   blobs.forEach(blob => {
+
     let size = blob.length;
 
-    if (size < 20 || size > 500) return;
+    // ❌ REMOVE VERY SMALL (lyrics, dots)
+    if (size < 20) return;
 
-    let sumY = 0;
-    blob.forEach(p => sumY += p.y);
-    let centerY = sumY / blob.length;
+    // ❌ REMOVE VERY LARGE (clefs, symbols)
+    if (size > 600) return;
 
-    // check alignment to grid
-    let remainder = centerY % gap;
-
-    let aligned = (
-      remainder < gap * 0.25 ||
-      remainder > gap * 0.75
-    );
-
-    if (!aligned) return;
-
-    // shape check
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
 
@@ -232,16 +210,29 @@ function filterWithGrid(blobs, gap) {
     let width = maxX - minX;
     let height = maxY - minY;
 
-    if (width < 5 || height < 5) return;
+    // ❌ REMOVE THIN SHAPES (lyrics, dynamics)
+    if (width < 4 || height < 4) return;
 
     let ratio = width / height;
 
-    if (ratio > 0.5 && ratio < 1.8) {
-      heads.push(blob);
-    }
+    // ❌ REMOVE VERTICAL (numbers, stems)
+    if (ratio < 0.3) return;
+
+    // ❌ REMOVE HORIZONTAL (beams)
+    if (ratio > 3) return;
+
+    // ❌ REMOVE NON-GRID (lyrics, rests)
+    let centerY = (minY + maxY) / 2;
+    let r = centerY % gap;
+
+    if (!(r < gap * 0.25 || r > gap * 0.75)) return;
+
+    // ✅ KEEP (likely note head)
+    kept.push(blob);
+
   });
 
-  output.innerHTML += "<br><b>Detected NOTE HEADS: " + heads.length + "</b>";
+  output.innerHTML += "<br><b>Remaining (NOTE HEADS): " + kept.length + "</b>";
 }
 </script>
 
