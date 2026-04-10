@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v16 - Size Based Detection</title>
+  <title>OMR v16.1 - Size Cluster Detection</title>
 
   <style>
     body {
@@ -61,7 +61,7 @@ input.addEventListener("change", function(e) {
   };
 });
 
-// STEP 1: BINARIZE
+// BINARIZE
 function processImage(ctx, w, h) {
   output.innerHTML += "<br>Processing image...";
 
@@ -79,7 +79,7 @@ function processImage(ctx, w, h) {
   detectBlobs(ctx, w, h);
 }
 
-// STEP 2: BLOBS
+// BLOBS
 function detectBlobs(ctx, w, h) {
   output.innerHTML += "<br>Detecting blobs...";
 
@@ -132,23 +132,39 @@ function detectBlobs(ctx, w, h) {
 
   output.innerHTML += "<br>Total blobs: " + blobs.length;
 
-  analyzeSizes(blobs);
+  findDominantSize(blobs);
 }
 
-// STEP 3: FIND DOMINANT SIZE 🔥
-function analyzeSizes(blobs) {
-  let sizes = blobs.map(b => b.length).filter(s => s > 20 && s < 800);
+// 🔥 FIND MOST COMMON SIZE (MODE)
+function findDominantSize(blobs) {
+  let histogram = {};
 
-  sizes.sort((a,b) => a-b);
+  blobs.forEach(b => {
+    let s = b.length;
 
-  let mid = sizes[Math.floor(sizes.length / 2)];
+    if (s < 10 || s > 500) return;
 
-  output.innerHTML += "<br>Estimated note size: " + mid;
+    let bucket = Math.round(s / 5) * 5; // group sizes
 
-  filterHeads(blobs, mid);
+    histogram[bucket] = (histogram[bucket] || 0) + 1;
+  });
+
+  let bestSize = 0;
+  let maxCount = 0;
+
+  for (let size in histogram) {
+    if (histogram[size] > maxCount) {
+      maxCount = histogram[size];
+      bestSize = parseInt(size);
+    }
+  }
+
+  output.innerHTML += "<br>Dominant note size: " + bestSize;
+
+  filterHeads(blobs, bestSize);
 }
 
-// STEP 4: FILTER USING SIZE
+// FILTER
 function filterHeads(blobs, targetSize) {
   output.innerHTML += "<br>Filtering note heads...";
 
@@ -157,8 +173,7 @@ function filterHeads(blobs, targetSize) {
   blobs.forEach(blob => {
     let size = blob.length;
 
-    // keep blobs near dominant size
-    if (size < targetSize * 0.5 || size > targetSize * 1.8) return;
+    if (size < targetSize * 0.6 || size > targetSize * 1.6) return;
 
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
@@ -188,4 +203,3 @@ function filterHeads(blobs, targetSize) {
 
 </body>
 </html>
-       
