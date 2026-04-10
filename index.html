@@ -1,7 +1,7 @@
-<!DOCTYPE html>
+   <!DOCTYPE html>
 <html>
 <head>
-  <title>OMR v15.2 - Note Head Detection</title>
+  <title>OMR v15.3 - Merge Fix</title>
 
   <style>
     body {
@@ -132,10 +132,47 @@ function detectBlobs(ctx, w, h) {
 
   output.innerHTML += "<br>Total blobs: " + blobs.length;
 
-  filterHeads(blobs);
+  const merged = mergeBlobs(blobs);
+  output.innerHTML += "<br>After merge: " + merged.length;
+
+  filterHeads(merged);
 }
 
-// STEP 3: NOTE HEAD FILTER (BALANCED)
+// STEP 3: MERGE CLOSE BLOBS 🔥
+function mergeBlobs(blobs) {
+  let merged = [];
+
+  blobs.forEach(blob => {
+    let added = false;
+
+    for (let group of merged) {
+      if (isClose(blob, group)) {
+        group.push(...blob);
+        added = true;
+        break;
+      }
+    }
+
+    if (!added) merged.push([...blob]);
+  });
+
+  return merged;
+}
+
+// proximity check
+function isClose(a, b) {
+  for (let p1 of a) {
+    for (let p2 of b) {
+      let dx = p1.x - p2.x;
+      let dy = p1.y - p2.y;
+
+      if (dx*dx + dy*dy < 25) return true; // distance 5px
+    }
+  }
+  return false;
+}
+
+// STEP 4: FILTER HEADS
 function filterHeads(blobs) {
   output.innerHTML += "<br>Filtering note heads...";
 
@@ -144,8 +181,7 @@ function filterHeads(blobs) {
   blobs.forEach(blob => {
     let size = blob.length;
 
-    // allow smaller + larger tolerance
-    if (size < 15 || size > 800) return;
+    if (size < 20 || size > 900) return;
 
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
@@ -162,25 +198,16 @@ function filterHeads(blobs) {
 
     if (width < 4 || height < 4) return;
 
-    // reject only extreme lines
     if (height > width * 2.5) return;
     if (width > height * 2.5) return;
 
     let ratio = width / height;
-    let area = width * height;
-    let density = size / area;
+    let density = size / (width * height);
 
-    // 🎯 FILLED NOTES
-    const filled =
-      density > 0.28 &&
-      ratio > 0.5 && ratio < 1.8;
-
-    // 🎯 OPEN NOTES (half/whole)
-    const open =
-      density > 0.15 && density <= 0.28 &&
-      ratio > 0.6 && ratio < 1.6;
-
-    if (filled || open) {
+    if (
+      ratio > 0.5 && ratio < 1.8 &&
+      density > 0.15
+    ) {
       heads.push(blob);
     }
   });
@@ -190,4 +217,4 @@ function filterHeads(blobs) {
 </script>
 
 </body>
-</html>
+</html>   
